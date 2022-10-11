@@ -5,7 +5,6 @@
 //  Created by Evgenii Kolgin on 11.10.2022.
 //
 
-import WebService
 import telegram_vapor_bot
 import Vapor
 

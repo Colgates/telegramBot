@@ -5,10 +5,10 @@
 //  Created by Evgenii Kolgin on 13.10.2022.
 //
 
-import Foundation
+import Vapor
 
 // MARK: - Response
-struct Response: Codable {
+struct Response: Content, Codable {
     let word: String
     let meanings: [Meaning]
 }

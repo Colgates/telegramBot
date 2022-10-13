@@ -11,7 +11,7 @@ import Vapor
 final class DefaultBotHandlers {
     
     static func addHandlers(app: Vapor.Application, bot: TGBotPrtcl) {
-//        defaultHandler(app: app, bot: bot)
+        defaultHandler(app: app, bot: bot)
         commandPingHandler(app: app, bot: bot)
         commandShowButtonsHandler(app: app, bot: bot)
         buttonsActionHandler(app: app, bot: bot)
@@ -23,8 +23,8 @@ final class DefaultBotHandlers {
 
     /// add handler for all messages unless command "/ping"
     private static func defaultHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: (.all && !.command.names(["/ping", "/show_buttons", "/start", "/reverse"]))) { update, bot in
-            guard var messageText = update.message?.text else { return }
+        let handler = TGMessageHandler(filters: (.all && !.command.names(["/ping", "/show_buttons", "/start", "/reverse", "/users"]))) { update, bot in
+            guard let messageText = update.message?.text else { return }
             let uri: URI = URI("https://api.dictionaryapi.dev/api/v2/entries/en/\(messageText)")
             let eventLoop = app.eventLoopGroup.next()
             let request = Request(application: app, method: .GET, url: uri, on: eventLoop)
@@ -140,7 +140,7 @@ final class DefaultBotHandlers {
     private static func usersHandler(app: Vapor.Application, bot: TGBotPrtcl) {
         let handler = TGMessageHandler(filters: .command.names(["/users"])) { update, bot in
             
-            let uri: URI = URI("https://json-srvr.onrender.com/users")
+            let uri: URI = URI("https://jsonplaceholder.typicode.com/users")
             let eventLoop = app.eventLoopGroup.next()
             let request = Request(application: app, method: .GET, url: uri, on: eventLoop)
             
@@ -151,8 +151,8 @@ final class DefaultBotHandlers {
                     guard let data = String(buffer: buffer).data(using: .utf8) else { return }
                     do {
                         let users = try JSONDecoder().decode([User].self, from: data)
-                        
-                        let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "\(users)")
+                        guard let randomUser = users.randomElement() else { return }
+                        let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "\(randomUser)")
                         try bot.sendMessage(params: params)
                     } catch {
                         print(error)

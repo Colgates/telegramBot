@@ -40,15 +40,15 @@ final class DefaultBotHandlers {
                         let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: definition)
                         try bot.sendMessage(params: params)
                     } catch {
-                        print(error)
+                        do {
+                            let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "Sorry pal, we couldn't find definitions for the word you were looking for.")
+                            try bot.sendMessage(params: params)
+                        } catch {
+                            print(error)
+                        }
                     }
-                case .failure:
-                    do {
-                        let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "Sorry pal, we couldn't find definitions for the word you were looking for.")
-                        try bot.sendMessage(params: params)
-                    } catch {
-                        print(error)
-                    }
+                case .failure(let error):
+                    print(error)
                 }
             }
         }

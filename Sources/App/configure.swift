@@ -5,7 +5,7 @@ import Vapor
 public func configure(_ app: Application) throws {
     // uncomment to serve files from /Public folder
     // app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-
+    
     let tgApi: String = Environment.get("BOT_TOKEN")!
     let connection: TGConnectionPrtcl = TGLongPollingConnection()
     TGBot.configure(connection: connection, botId: tgApi, vaporClient: app.client)

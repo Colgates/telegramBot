@@ -11,7 +11,7 @@ import Vapor
 final class DefaultBotHandlers {
     
     static func addHandlers(app: Vapor.Application, bot: TGBotPrtcl) {
-        defaultHandler(app: app, bot: bot)
+//        defaultHandler(app: app, bot: bot)
         commandPingHandler(app: app, bot: bot)
         commandShowButtonsHandler(app: app, bot: bot)
         buttonsActionHandler(app: app, bot: bot)
@@ -23,9 +23,34 @@ final class DefaultBotHandlers {
 
     /// add handler for all messages unless command "/ping"
     private static func defaultHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: (.all && !.command.names(["/ping"]))) { update, bot in
-            let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "Just a word")
-            try bot.sendMessage(params: params)
+        let handler = TGMessageHandler(filters: (.all && !.command.names(["/ping", "/show_buttons", "/start", "/reverse"]))) { update, bot in
+            guard var messageText = update.message?.text else { return }
+            let uri: URI = URI("https://api.dictionaryapi.dev/api/v2/entries/en/\(messageText)")
+            let eventLoop = app.eventLoopGroup.next()
+            let request = Request(application: app, method: .GET, url: uri, on: eventLoop)
+            
+            request.client.get(uri).whenComplete { result in
+                switch result {
+                case .success(let response):
+                    guard let buffer = response.body else { return }
+                    guard let data = String(buffer: buffer).data(using: .utf8) else { return }
+                    do {
+                        let decodedData = try JSONDecoder().decode([Response].self, from: data)
+                        guard let definition = decodedData.first?.meanings.first?.definitions.first?.definition else { return }
+                        let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: definition)
+                        try bot.sendMessage(params: params)
+                    } catch {
+                        print(error)
+                    }
+                case .failure:
+                    do {
+                        let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "Sorry pal, we couldn't find definitions for the word you were looking for.")
+                        try bot.sendMessage(params: params)
+                    } catch {
+                        print(error)
+                    }
+                }
+            }
         }
         bot.connection.dispatcher.add(handler)
     }

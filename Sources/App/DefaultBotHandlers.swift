@@ -11,7 +11,7 @@ import Vapor
 final class DefaultBotHandlers {
     
     static func addHandlers(app: Vapor.Application, bot: TGBotPrtcl) {
-//        defaultHandler(app: app, bot: bot)
+        defaultHandler(app: app, bot: bot)
         commandPingHandler(app: app, bot: bot)
         commandShowButtonsHandler(app: app, bot: bot)
         buttonsActionHandler(app: app, bot: bot)
@@ -23,8 +23,29 @@ final class DefaultBotHandlers {
     /// add handler for all messages unless command "/ping"
     private static func defaultHandler(app: Vapor.Application, bot: TGBotPrtcl) {
         let handler = TGMessageHandler(filters: (.all && !.command.names(["/ping"]))) { update, bot in
-            let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "Success")
-            try bot.sendMessage(params: params)
+            
+            guard let messageText = update.message?.text else { return }
+            APIClient.fetchDefiniton(for: messageText) { result in
+                switch result {
+                case .success(let response):
+                    guard let definition = response.first?.meanings.first?.definitions.first?.definition else { return }
+                    let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: definition)
+                    do {
+                        try bot.sendMessage(params: params)
+                    } catch {
+                        print(error)
+                    }
+                case .failure(let error):
+                    
+                    let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "\(error)")
+                    do {
+                        try bot.sendMessage(params: params)
+                    } catch {
+                        print(error)
+                    }
+
+                }
+            }
         }
         bot.connection.dispatcher.add(handler)
     }

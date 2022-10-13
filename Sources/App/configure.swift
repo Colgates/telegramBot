@@ -15,7 +15,6 @@ public func configure(_ app: Application) throws {
     TGBot.log.logLevel = .error
 
     DefaultBotHandlers.addHandlers(app: app, bot: TGBot.shared)
-    DefaultBotHandlers.fetchUsers()
     // register routes
     try routes(app)
 }

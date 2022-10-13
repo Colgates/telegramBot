@@ -18,6 +18,7 @@ final class DefaultBotHandlers {
         startHandler(app: app, bot: bot)
         reverseHandler(app: app, bot: bot)
         diceHandler(app: app, bot: bot)
+        usersHandler(app: app, bot: bot)
     }
 
     /// add handler for all messages unless command "/ping"
@@ -132,27 +133,31 @@ final class DefaultBotHandlers {
         bot.connection.dispatcher.add(handler)
     }
     
-//    private static func usersHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-//        let handler = TGMessageHandler(filters: .command.names(["/users"])) { update, bot in
-//
-//            let users = app.get("users") { request in
-//                let uri: URI = URI("https://json-srvr.onrender.com/users")
-//                return request.client.get(uri).flatMapThrowing { response in
-//                    guard response.status == .ok else { throw Abort(.badRequest) }
-//                    guard let buffer = response.body else { throw Abort(.badRequest) }
-//                    guard let data = String(buffer: buffer).data(using: .utf8) else { throw Abort(.badRequest) }
-//
-//                    do {
-//                        return try JSONDecoder().decode([User].self, from: data)
-//                    } catch {
-//                        throw Abort(.badRequest)
-//                    }
-//                }
-//            }
-//            print(users)
-//            let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "")
-//            try bot.sendMessage(params: params)
-//        }
-//        bot.connection.dispatcher.add(handler)
-//    }
+    private static func usersHandler(app: Vapor.Application, bot: TGBotPrtcl) {
+        let handler = TGMessageHandler(filters: .command.names(["/users"])) { update, bot in
+            
+            let uri: URI = URI("https://json-srvr.onrender.com/users")
+            let eventLoop = app.eventLoopGroup.next()
+            let request = Request(application: app, method: .GET, url: uri, on: eventLoop)
+            
+            request.client.get(uri).whenComplete { result in
+                switch result {
+                case .success(let response):
+                    guard let buffer = response.body else { return }
+                    guard let data = String(buffer: buffer).data(using: .utf8) else { return }
+                    do {
+                        let users = try JSONDecoder().decode([User].self, from: data)
+                        
+                        let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "\(users)")
+                        try bot.sendMessage(params: params)
+                    } catch {
+                        print(error)
+                    }
+                case .failure(let failure):
+                    print(failure)
+                }
+            }
+        }
+        bot.connection.dispatcher.add(handler)
+    }
 }

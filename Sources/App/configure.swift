@@ -11,10 +11,6 @@ public func configure(_ app: Application) throws {
     TGBot.configure(connection: connection, botId: tgApi, vaporClient: app.client)
     try TGBot.shared.start()
 
-    /// set level of debug if you needed
     TGBot.log.logLevel = .error
-    DefaultBotHandlers.addHandlers(app: app, bot: TGBot.shared)
-    
-    // register routes
-//    try routes(app)
+    BotHandlers.addHandlers(app: app, bot: TGBot.shared)
 }

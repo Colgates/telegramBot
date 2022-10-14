@@ -7,29 +7,38 @@
 
 import Vapor
 
-// MARK: - Response
+// MARK: - Welcome
 struct Response: Content, Codable {
-    let word: String
-    let meanings: [Meaning]
+    let similar: Similar
+
+    enum CodingKeys: String, CodingKey {
+        case similar = "Similar"
+    }
 }
 
-// MARK: - Meaning
-struct Meaning: Codable {
-    let partOfSpeech: String
-    let definitions: [Definition]
-    let synonyms, antonyms: [String]
+// MARK: - Similar
+struct Similar: Codable {
+//    let info: [Results]
+    let results: [Results]
+
+    enum CodingKeys: String, CodingKey {
+//        case info = "Info"
+        case results = "Results"
+    }
 }
 
-// MARK: - Definition
-struct Definition: Codable {
-    let definition: String
-    let example: String?
-}
+// MARK: - Results
+struct Results: Codable {
+    let name, type, wTeaser: String
+    let wURL, yURL: String
+    let yID: String
 
-// MARK: - Error Response
-struct ErrorResponse: Codable {
-    let title: String
-    let message: String
-    let resolution: String
+    enum CodingKeys: String, CodingKey {
+        case name = "Name"
+        case type = "Type"
+        case wTeaser
+        case wURL = "wUrl"
+        case yURL = "yUrl"
+        case yID
+    }
 }
-

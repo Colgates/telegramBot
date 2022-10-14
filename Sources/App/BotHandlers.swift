@@ -51,11 +51,12 @@ final class BotHandlers {
             guard let message = update.message else { return }
             let chatId: TGChatId = .chat(message.chat.id)
             
-            guard let query = message.text?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
+            guard let query = message.text else { return }
 
             app.client.get(uri(for: query)).whenComplete { result in
                 switch result {
                 case .success(let response):
+                    
                     guard let buffer = response.body else { return }
                     guard let data = String(buffer: buffer).data(using: .utf8) else { return }
                     
@@ -74,6 +75,7 @@ final class BotHandlers {
                     } catch {
                         print(error)
                     }
+                    
                 case .failure(let error):
                     print(error)
                 }
@@ -87,7 +89,7 @@ final class BotHandlers {
         let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
             guard let chatId: TGChatId = dictionary[id] else { return }
             let text = createHTML(from: result)
-            send(text, chatId, bot, parseMode: .html, disableWebPagePreview: false)
+            send(text, chatId, bot, parseMode: .html)
         }
         bot.connection.dispatcher.add(handler)
     }
@@ -114,12 +116,13 @@ extension BotHandlers {
         components.host = "tastedive.com"
         components.path = "/api/similar"
         components.queryItems = [
-            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "q", value: query.replacingOccurrences(of: " ", with: "+")),
             URLQueryItem(name: "limit", value: "10"),
             URLQueryItem(name: "info", value: "1"),
             URLQueryItem(name: "k", value: "\(Environment.get("API_KEY")!)"),
         ]
-        return URI(string: components.url?.absoluteString ?? "")
+        let uri = URI(string: components.url?.absoluteString ?? "")
+        return uri
     }
     
     private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, _ replyMarkup: TGReplyMarkup? = nil) {

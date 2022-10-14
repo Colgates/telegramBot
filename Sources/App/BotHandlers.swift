@@ -57,7 +57,6 @@ final class BotHandlers {
             let request = Request(application: app, method: .GET, url: getUrl(for: query), on: eventLoop)
             
             request.client.get(request.url).whenComplete { result in
-                
                 switch result {
                 case .success(let response):
                     guard let buffer = response.body else { return }

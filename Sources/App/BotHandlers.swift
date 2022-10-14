@@ -53,8 +53,7 @@ final class BotHandlers {
             
             guard let query = message.text?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
 
-
-            app.client.get(getUrl(for: query)).whenComplete { result in
+            app.client.get(uri(for: query)).whenComplete { result in
                 switch result {
                 case .success(let response):
                     guard let buffer = response.body else { return }
@@ -62,21 +61,13 @@ final class BotHandlers {
                     
                     do {
                         let decodedData = try JSONDecoder().decode(Response.self, from: data)
-                        let results = decodedData.similar.results
+                        let items = decodedData.similar.results
                         
-                        var keyboard: [[TGInlineKeyboardButton]] = [[]]
-                        
-                        switch !results.isEmpty {
+                        switch !items.isEmpty {
                         case true:
-                            results.forEach { result in
-                                let id = UUID().uuidString
-                                dictionary[id] = chatId
-                                let button: [TGInlineKeyboardButton] = [.init(text: result.name, callbackData: id)]
-                                
-                                keyboard.append(button)
-                                createButtonsActionHandler(app: app, bot: bot, result: result, id: id)
-                            }
-                            send("Here's what I found:", chatId, bot, replyMarkup: .inlineKeyboardMarkup(.init(inlineKeyboard: keyboard)))
+                            let replyMarkup = createAndPopulateInlineReplyMarkup(with: items, chatId, bot)
+                            
+                            send("Here's what I found:", chatId, bot, message.messageId, replyMarkup)
                         default:
                             send("Sorry we couldn't find anything for your request.", chatId, bot)
                         }
@@ -91,7 +82,7 @@ final class BotHandlers {
         bot.connection.dispatcher.add(handler)
     }
     
-    private static func createButtonsActionHandler(app: Vapor.Application, bot: TGBotPrtcl, result: Result, id: String) {
+    private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ result: Result, _ id: String) {
         
         let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
             guard let chatId: TGChatId = dictionary[id] else { return }
@@ -117,23 +108,23 @@ extension BotHandlers {
         """
     }
     
-    private static func getUrl(for query: String) -> URI {
+    private static func uri(for query: String) -> URI {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "tastedive.com"
         components.path = "/api/similar"
         components.queryItems = [
             URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "limit", value: "5"),
+            URLQueryItem(name: "limit", value: "10"),
             URLQueryItem(name: "info", value: "1"),
             URLQueryItem(name: "k", value: "\(Environment.get("API_KEY")!)"),
         ]
         return URI(string: components.url?.absoluteString ?? "")
     }
     
-    private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, replyMarkup: TGReplyMarkup? = nil) {
+    private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, _ replyMarkup: TGReplyMarkup? = nil) {
         do {
-            let params: TGSendMessageParams = .init(chatId: chatId, text: text, parseMode: parseMode, disableWebPagePreview: disableWebPagePreview, replyMarkup: replyMarkup)
+            let params: TGSendMessageParams = .init(chatId: chatId, text: text, parseMode: parseMode, disableWebPagePreview: disableWebPagePreview, replyToMessageId: replyToMessageId, replyMarkup: replyMarkup)
             try bot.sendMessage(params: params)
         } catch {
             print(error)
@@ -147,5 +138,34 @@ extension BotHandlers {
         } catch {
             print(error)
         }
+    }
+    
+    /// Description: Calculate and populate 2D array of data
+    /// - Parameters:
+    ///   - results: array of data reults to populate names of buttons
+    ///   - chatId: chatId for callback handlers
+    ///   - bot: an instance of Bot to dispatch handlers
+    private static func createAndPopulateInlineReplyMarkup(with items: [Result], _ chatId: TGChatId, _ bot: TGBotPrtcl) -> TGReplyMarkup {
+        let itemPerRow = 2 // items per row
+        let rows = Int((Double(items.count) / Double(itemPerRow)).rounded()) // number of rows
+
+        var keyboard:[[TGInlineKeyboardButton]] = []
+        var count = 0 // variable to iterate through items array
+        for row in 0...rows {
+            keyboard.append([TGInlineKeyboardButton]()) // append empty array
+            for _ in 0..<itemPerRow {
+                if count < items.count {
+                    let id = UUID().uuidString // create an id for callback
+                    dictionary[id] = chatId // store id and chatid in dictionary
+                    let item = items[count] // single item
+                    let button = TGInlineKeyboardButton(text: item.name, callbackData: id)
+                    keyboard[row].append(button)
+                    createButtonsActionHandler(bot, item, id)
+                    count += 1
+                }
+            }
+        }
+        let replyMarkup: TGReplyMarkup = .inlineKeyboardMarkup(.init(inlineKeyboard: keyboard))
+        return replyMarkup
     }
 }

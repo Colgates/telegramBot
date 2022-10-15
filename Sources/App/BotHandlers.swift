@@ -27,11 +27,12 @@ final class BotHandlers {
             if let range = query.range(of: "/define ") {
                 query.removeSubrange(range)
             }
+            guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
             let chatId: TGChatId = .chat(message.chat.id)
             let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
             
             getResourceOf(type: [Word].self, for: url, app) { result in
-                print("define")
+                
                 switch result {
                 case .success(let data):
                     guard let array = data.first else { return }
@@ -115,11 +116,11 @@ final class BotHandlers {
             getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
                 switch result {
                 case .success(let data):
-                    let items = data.similar.results
-                    
+                    let items = data.similar.results.shuffled()
+                    let sliceOfItems = items.prefix(10).shuffled()
                     switch !items.isEmpty {
                     case true:
-                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: items, chatId, bot)
+                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: sliceOfItems, chatId, bot)
                         
                         send("Here's what I found:", chatId, bot, message.messageId, replyMarkup)
                     default:
@@ -156,10 +157,11 @@ extension BotHandlers {
         components.path = "/api/similar"
         components.queryItems = [
             URLQueryItem(name: "q", value: query.replacingOccurrences(of: " ", with: "+")),
-            URLQueryItem(name: "limit", value: "10"),
+//            URLQueryItem(name: "limit", value: "10"),
             URLQueryItem(name: "info", value: "1"),
             URLQueryItem(name: "k", value: "\(Environment.get("API_KEY")!)"),
         ]
+        print(components.url?.absoluteString ?? "")
         return components.url?.absoluteString ?? ""
     }
     

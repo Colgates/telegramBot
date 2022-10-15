@@ -28,7 +28,7 @@ struct Similar: Codable {
 }
 
 // MARK: - Results
-struct Item: Codable {
+struct Item: Codable, Repliable {
     let name: String
     let type: String
     let wTeaser: String?

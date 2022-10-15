@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum Emoji: CaseIterable {
+enum Emoji: CaseIterable, Repliable {
     case dice
     case darts
     case bowling

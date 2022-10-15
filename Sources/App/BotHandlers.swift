@@ -25,7 +25,7 @@ final class BotHandlers {
         let command = "/define"
         let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
             guard let message = update.message else { return }
-            let chatId: TGChatId = .chat(message.chat.id)
+            let chatId = getChatID(from: message)
             
             if var query = message.text, query != command {
                 query.replaceSelf("\(command) ", "")
@@ -66,9 +66,10 @@ final class BotHandlers {
     private static func diceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
         let handler = TGMessageHandler(filters: .command.names(["/dice"])) { update, bot in
             guard let message = update.message else { return }
-            let chatId: TGChatId = .chat(message.chat.id)
-            let params: TGSendDiceParams = .init(chatId: chatId, emoji: Emoji.dice.name)
-            try bot.sendDice(params: params)
+            let chatId = getChatID(from: message)
+            
+            let replyMarkup: TGReplyMarkup = createAndPopulateInlineReplyMarkup(with: Emoji.allCases, chatId, bot, itemsPerRow: 3)
+            send("Choose what you want:", chatId, bot, message.messageId, replyMarkup: replyMarkup)
         }
         bot.connection.dispatcher.add(handler)
     }
@@ -86,7 +87,8 @@ final class BotHandlers {
         let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
             
             guard let message = update.message else { return }
-            let chatId: TGChatId = .chat(message.chat.id)
+            let chatId = getChatID(from: message)
+            
             if var query = message.text, query != command {
                 query.replaceSelf("\(command) ", "")
                 
@@ -119,7 +121,7 @@ final class BotHandlers {
         let command = "/pronounce"
         let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
             guard let message = update.message else { return }
-            let chatId: TGChatId = .chat(message.chat.id)
+            let chatId = getChatID(from: message)
             if var query = message.text, query != command {
                 query.replaceSelf("\(command) ", "")
                 
@@ -154,8 +156,7 @@ final class BotHandlers {
     private static func queryHandler(app: Vapor.Application, bot: TGBotPrtcl) {
         let handler = TGMessageHandler(filters: .text && !.command) { update, bot in
             guard let message = update.message else { return }
-            let chatId: TGChatId = .chat(message.chat.id)
-            
+            let chatId = getChatID(from: message)
             guard let query = message.text else { return }
             
             getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
@@ -234,18 +235,27 @@ extension BotHandlers {
         }
     }
     
+    private static func sendDice(_ emojiName: String, _ chatId: TGChatId, _ bot: TGBotPrtcl) {
+        do {
+            let params: TGSendDiceParams = .init(chatId: chatId, emoji: emojiName)
+            try bot.sendDice(params: params)
+        } catch {
+            print(error)
+        }
+    }
+    
     /// Description: Calculate and populate 2D array of data
     /// - Parameters:
     ///   - results: array of data reults to populate names of buttons
     ///   - chatId: chatId for callback handlers
     ///   - bot: an instance of Bot to dispatch handlers
-    private static func createAndPopulateInlineReplyMarkup(with items: [Item], _ chatId: TGChatId, _ bot: TGBotPrtcl, itemsPerRow: Int) -> TGReplyMarkup {
+    private static func createAndPopulateInlineReplyMarkup(with items: [Repliable], _ chatId: TGChatId, _ bot: TGBotPrtcl, itemsPerRow: Int) -> TGReplyMarkup {
         
-        let rows = Int((Double(items.count) / Double(itemsPerRow)).rounded()) // number of rows
+        let numOfRows = divideRoundUp(n: items.count, d: itemsPerRow)
         
         var keyboard:[[TGInlineKeyboardButton]] = []
-        var count = 0 // variable to iterate through items array
-        for row in 0...rows {
+        var count = 0 // counter to iterate through items array
+        for row in 0...numOfRows {
             keyboard.append([TGInlineKeyboardButton]()) // append empty array
             for _ in 0..<itemsPerRow {
                 if count < items.count {
@@ -263,15 +273,24 @@ extension BotHandlers {
         return replyMarkup
     }
     
-    private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ result: Item, _ id: String) {
+    private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ object: Repliable, _ id: String) {
         let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
+            guard let chatId: TGChatId = dictionary[id] else { return }
             
+            switch object {
+            case is Item:
+                guard let item = object as? Item else { return }
+                let text = createHTML(from: item)
+                send(text, chatId, bot, parseMode: .html)
+            case is Emoji:
+                guard let emoji = object as? Emoji else { return }
+                sendDice(emoji.name, chatId, bot)
+            default:
+                break
+            }
+            // close callback
             let callbackParams: TGAnswerCallbackQueryParams = .init(callbackQueryId: update.callbackQuery?.id ?? "0")
             try bot.answerCallbackQuery(params: callbackParams)
-            
-            guard let chatId: TGChatId = dictionary[id] else { return }
-            let text = createHTML(from: result)
-            send(text, chatId, bot, parseMode: .html)
         }
         bot.connection.dispatcher.add(handler)
     }
@@ -299,4 +318,14 @@ extension BotHandlers {
             }
         }
     }
+    
+    private static func getChatID(from message: TGMessage) -> TGChatId {
+        .chat(message.chat.id)
+    }
+    
+    private static func divideRoundUp(n: Int, d: Int) -> Int {
+        return n / d + (n % d == 0 ? 0 : 1)
+    }
 }
+
+

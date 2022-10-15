@@ -21,38 +21,43 @@ final class BotHandlers {
     }
     
     private static func defineHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .command.names(["/define"])) { update, bot in
+        let command = "/define"
+        let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
             guard let message = update.message else { return }
-            guard var query = message.text else { return }
-            if let range = query.range(of: "/define ") {
-                query.removeSubrange(range)
-            }
-            guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
             let chatId: TGChatId = .chat(message.chat.id)
-            let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
             
-            getResourceOf(type: [Word].self, for: url, app) { result in
-                
-                switch result {
-                case .success(let data):
-                    guard let array = data.first else { return }
-                    let meanings = array.meanings
-                    
-                    var text = ""
-                    var count = 1
-                    
-                    meanings.forEach { meaning in
-                        meaning.definitions.forEach { element in
-                            text += "\n\(count). \(element.definition)"
-                            count += 1
-                        }
-                    }
-                    
-                    send(text, chatId, bot, parseMode: .html, message.messageId)
-                    
-                case .failure(let error):
-                    print(error)
+            if var query = message.text, query != command {
+                if let range = query.range(of: command) {
+                    query.removeSubrange(range)
                 }
+                guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
+                let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
+                
+                getResourceOf(type: [Word].self, for: url, app) { result in
+                    
+                    switch result {
+                    case .success(let data):
+                        guard let array = data.first else { return }
+                        let meanings = array.meanings
+                        
+                        var text = ""
+                        var count = 1
+                        
+                        meanings.forEach { meaning in
+                            meaning.definitions.forEach { element in
+                                text += "\n\(count). \(element.definition)"
+                                count += 1
+                            }
+                        }
+                        
+                        send(text, chatId, bot, parseMode: .html, message.messageId)
+                        
+                    case .failure(let error):
+                        print(error)
+                    }
+                }
+            } else {
+                send("Please send me a message like: \(command) word", chatId, bot, message.messageId)
             }
         }
         bot.connection.dispatcher.add(handler)
@@ -60,7 +65,9 @@ final class BotHandlers {
     
     private static func diceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
         let handler = TGMessageHandler(filters: .command.names(["/dice"])) { update, bot in
-            let params: TGSendDiceParams = .init(chatId: .chat(update.message!.chat.id))
+            guard let message = update.message else { return }
+            let chatId: TGChatId = .chat(message.chat.id)
+            let params: TGSendDiceParams = .init(chatId: chatId, emoji: Emoji.dice.name)
             try bot.sendDice(params: params)
         }
         bot.connection.dispatcher.add(handler)
@@ -75,13 +82,15 @@ final class BotHandlers {
     }
     
     private static func pronounceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .command.names(["/pronounce"])) { update, bot in
-                guard let message = update.message else { return }
-                guard var query = message.text else { return }
-                if let range = query.range(of: "/pronounce ") {
+        let command = "/pronounce"
+        let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
+            guard let message = update.message else { return }
+            let chatId: TGChatId = .chat(message.chat.id)
+            if var query = message.text, query != command {
+                if let range = query.range(of: command) {
                     query.removeSubrange(range)
                 }
-                let chatId: TGChatId = .chat(message.chat.id)
+                guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
                 let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
                 
                 getResourceOf(type: [Word].self, for: url, app) { result in
@@ -102,7 +111,10 @@ final class BotHandlers {
                         print(error)
                     }
                 }
+            } else {
+                send("Please send me a message like: \(command) word", chatId, bot, message.messageId)
             }
+        }
         bot.connection.dispatcher.add(handler)
     }
     
@@ -112,7 +124,7 @@ final class BotHandlers {
             let chatId: TGChatId = .chat(message.chat.id)
             
             guard let query = message.text else { return }
-
+            
             getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
                 switch result {
                 case .success(let data):
@@ -120,11 +132,11 @@ final class BotHandlers {
                     let sliceOfItems = items.prefix(10).shuffled()
                     switch !items.isEmpty {
                     case true:
-                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: sliceOfItems, chatId, bot)
+                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: sliceOfItems, chatId, bot, itemsPerRow: 2)
                         
-                        send("Here's what I found:", chatId, bot, message.messageId, replyMarkup)
+                        send("Here's what I found:", chatId, bot, message.messageId, replyMarkup: replyMarkup)
                     default:
-                        send("Sorry we couldn't find anything for your request.", chatId, bot)
+                        send("Sorry we couldn't find anything for your request.", chatId, bot, message.messageId)
                     }
                 case .failure(let error):
                     print(error)
@@ -139,15 +151,22 @@ final class BotHandlers {
 extension BotHandlers {
     
     private static func createHTML(from result: Item) -> String {
-        return """
-        <strong>\(result.name)</strong>
-
-        \(result.wTeaser)
-
-        <a href="\(result.yURL)">YouTube Link</a>
-
-        <a href="\(result.wURL)">Wikipedia Link</a>
-        """
+            var description: String
+            if let temp = result.wTeaser, temp != "" {
+                description = temp
+            } else {
+                description = "No description"
+            }
+            
+            return """
+            <strong>\(result.name)</strong>
+            
+            \(description)
+            
+            <a href="\(result.yURL ?? "")">\(result.yURL == nil ? "": "YouTube Link")</a>
+            
+            <a href="\(result.wURL ?? "")">\(result.wURL == nil ? "": "Wikipedia Link")</a>
+            """
     }
     
     private static func urlString(for query: String) -> String {
@@ -157,15 +176,14 @@ extension BotHandlers {
         components.path = "/api/similar"
         components.queryItems = [
             URLQueryItem(name: "q", value: query.replacingOccurrences(of: " ", with: "+")),
-//            URLQueryItem(name: "limit", value: "10"),
+            //            URLQueryItem(name: "limit", value: "10"),
             URLQueryItem(name: "info", value: "1"),
             URLQueryItem(name: "k", value: "\(Environment.get("API_KEY")!)"),
         ]
-        print(components.url?.absoluteString ?? "")
         return components.url?.absoluteString ?? ""
     }
     
-    private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, _ replyMarkup: TGReplyMarkup? = nil) {
+    private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, replyMarkup: TGReplyMarkup? = nil) {
         do {
             let params: TGSendMessageParams = .init(chatId: chatId, text: text, parseMode: parseMode, disableWebPagePreview: disableWebPagePreview, replyToMessageId: replyToMessageId, replyMarkup: replyMarkup)
             try bot.sendMessage(params: params)
@@ -188,15 +206,15 @@ extension BotHandlers {
     ///   - results: array of data reults to populate names of buttons
     ///   - chatId: chatId for callback handlers
     ///   - bot: an instance of Bot to dispatch handlers
-    private static func createAndPopulateInlineReplyMarkup(with items: [Item], _ chatId: TGChatId, _ bot: TGBotPrtcl) -> TGReplyMarkup {
-        let itemPerRow = 2 // items per row
-        let rows = Int((Double(items.count) / Double(itemPerRow)).rounded()) // number of rows
-
+    private static func createAndPopulateInlineReplyMarkup(with items: [Item], _ chatId: TGChatId, _ bot: TGBotPrtcl, itemsPerRow: Int) -> TGReplyMarkup {
+        
+        let rows = Int((Double(items.count) / Double(itemsPerRow)).rounded()) // number of rows
+        
         var keyboard:[[TGInlineKeyboardButton]] = []
         var count = 0 // variable to iterate through items array
         for row in 0...rows {
             keyboard.append([TGInlineKeyboardButton]()) // append empty array
-            for _ in 0..<itemPerRow {
+            for _ in 0..<itemsPerRow {
                 if count < items.count {
                     let id = UUID().uuidString // create an id for callback
                     dictionary[id] = chatId // store id and chatid in dictionary
@@ -214,6 +232,10 @@ extension BotHandlers {
     
     private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ result: Item, _ id: String) {
         let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
+            
+            let callbackParams: TGAnswerCallbackQueryParams = .init(callbackQueryId: update.callbackQuery?.id ?? "0")
+            try bot.answerCallbackQuery(params: callbackParams)
+            
             guard let chatId: TGChatId = dictionary[id] else { return }
             let text = createHTML(from: result)
             send(text, chatId, bot, parseMode: .html)

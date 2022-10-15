@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  Response.swift
 //  
 //
 //  Created by Evgenii Kolgin on 13.10.2022.
@@ -29,9 +29,12 @@ struct Similar: Codable {
 
 // MARK: - Results
 struct Item: Codable {
-    let name, type, wTeaser: String
-    let wURL, yURL: String
-    let yID: String
+    let name: String
+    let type: String
+    let wTeaser: String?
+    let wURL: String?
+    let yURL: String?
+    let yID: String?
 
     enum CodingKeys: String, CodingKey {
         case name = "Name"

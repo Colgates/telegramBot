@@ -10,30 +10,57 @@ import Vapor
 
 final class BotHandlers {
     
-    private static var commandsNames: [String] = ["/start", "/stop", "/help", "/show_buttons"]
     private static var dictionary: [String: TGChatId] = [:]
     
     static func addHandlers(app: Vapor.Application, bot: TGBotPrtcl) {
-        startHandler(app: app, bot: bot)
-        stopHandler(app: app, bot: bot)
+        defineHandler(app: app, bot: bot)
+        diceHandler(app: app, bot: bot)
         helpHandler(app: app, bot: bot)
+        pronounceHandler(app: app, bot: bot)
         queryHandler(app: app, bot: bot)
     }
     
-    private static func startHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .command.names(["/start"])) { update, bot in
+    private static func defineHandler(app: Vapor.Application, bot: TGBotPrtcl) {
+        let handler = TGMessageHandler(filters: .command.names(["/define"])) { update, bot in
+            guard let message = update.message else { return }
+            guard var query = message.text else { return }
+            if let range = query.range(of: "/define ") {
+                query.removeSubrange(range)
+            }
+            let chatId: TGChatId = .chat(message.chat.id)
+            let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
             
-            let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "This bot can help to get similar things, just send me something: a book, a movie or a music band...")
-            try bot.sendMessage(params: params)
+            getResourceOf(type: [Word].self, for: url, app) { result in
+                print("define")
+                switch result {
+                case .success(let data):
+                    guard let array = data.first else { return }
+                    let meanings = array.meanings
+                    
+                    var text = ""
+                    var count = 1
+                    
+                    meanings.forEach { meaning in
+                        meaning.definitions.forEach { element in
+                            text += "\n\(count). \(element.definition)"
+                            count += 1
+                        }
+                    }
+                    
+                    send(text, chatId, bot, parseMode: .html, message.messageId)
+                    
+                case .failure(let error):
+                    print(error)
+                }
+            }
         }
         bot.connection.dispatcher.add(handler)
     }
     
-    private static func stopHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .command.names(["/stop"])) { update, bot in
-            
-            let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "This bot can help to get similar things, just send me something: a book, a movie or a music band...")
-            try bot.sendMessage(params: params)
+    private static func diceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
+        let handler = TGMessageHandler(filters: .command.names(["/dice"])) { update, bot in
+            let params: TGSendDiceParams = .init(chatId: .chat(update.message!.chat.id))
+            try bot.sendDice(params: params)
         }
         bot.connection.dispatcher.add(handler)
     }
@@ -46,50 +73,62 @@ final class BotHandlers {
         bot.connection.dispatcher.add(handler)
     }
     
+    private static func pronounceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
+        let handler = TGMessageHandler(filters: .command.names(["/pronounce"])) { update, bot in
+                guard let message = update.message else { return }
+                guard var query = message.text else { return }
+                if let range = query.range(of: "/pronounce ") {
+                    query.removeSubrange(range)
+                }
+                let chatId: TGChatId = .chat(message.chat.id)
+                let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
+                
+                getResourceOf(type: [Word].self, for: url, app) { result in
+                    switch result {
+                    case .success(let data):
+                        guard let array = data.first else { return }
+                        array.phonetics.forEach { element in
+                            if element.audio != "" {
+                                do {
+                                    let params: TGSendAudioParams = .init(chatId: chatId, audio: .url(element.audio))
+                                    try bot.sendAudio(params: params)
+                                } catch {
+                                    print(error)
+                                }
+                            }
+                        }
+                    case .failure(let error):
+                        print(error)
+                    }
+                }
+            }
+        bot.connection.dispatcher.add(handler)
+    }
+    
     private static func queryHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .all && !.command.names(commandsNames)) { update, bot in
+        let handler = TGMessageHandler(filters: .text && !.command) { update, bot in
             guard let message = update.message else { return }
             let chatId: TGChatId = .chat(message.chat.id)
             
             guard let query = message.text else { return }
 
-            app.client.get(uri(for: query)).whenComplete { result in
+            getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
                 switch result {
-                case .success(let response):
+                case .success(let data):
+                    let items = data.similar.results
                     
-                    guard let buffer = response.body else { return }
-                    guard let data = String(buffer: buffer).data(using: .utf8) else { return }
-                    
-                    do {
-                        let decodedData = try JSONDecoder().decode(Response.self, from: data)
-                        let items = decodedData.similar.results
+                    switch !items.isEmpty {
+                    case true:
+                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: items, chatId, bot)
                         
-                        switch !items.isEmpty {
-                        case true:
-                            let replyMarkup = createAndPopulateInlineReplyMarkup(with: items, chatId, bot)
-                            
-                            send("Here's what I found:", chatId, bot, message.messageId, replyMarkup)
-                        default:
-                            send("Sorry we couldn't find anything for your request.", chatId, bot)
-                        }
-                    } catch {
-                        print(error)
+                        send("Here's what I found:", chatId, bot, message.messageId, replyMarkup)
+                    default:
+                        send("Sorry we couldn't find anything for your request.", chatId, bot)
                     }
-                    
                 case .failure(let error):
                     print(error)
                 }
             }
-        }
-        bot.connection.dispatcher.add(handler)
-    }
-    
-    private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ result: Result, _ id: String) {
-        
-        let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
-            guard let chatId: TGChatId = dictionary[id] else { return }
-            let text = createHTML(from: result)
-            send(text, chatId, bot, parseMode: .html)
         }
         bot.connection.dispatcher.add(handler)
     }
@@ -98,7 +137,7 @@ final class BotHandlers {
 // MARK: - Helpers
 extension BotHandlers {
     
-    private static func createHTML(from result: Result) -> String {
+    private static func createHTML(from result: Item) -> String {
         return """
         <strong>\(result.name)</strong>
 
@@ -110,7 +149,7 @@ extension BotHandlers {
         """
     }
     
-    private static func uri(for query: String) -> URI {
+    private static func urlString(for query: String) -> String {
         var components = URLComponents()
         components.scheme = "https"
         components.host = "tastedive.com"
@@ -121,8 +160,7 @@ extension BotHandlers {
             URLQueryItem(name: "info", value: "1"),
             URLQueryItem(name: "k", value: "\(Environment.get("API_KEY")!)"),
         ]
-        let uri = URI(string: components.url?.absoluteString ?? "")
-        return uri
+        return components.url?.absoluteString ?? ""
     }
     
     private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, _ replyMarkup: TGReplyMarkup? = nil) {
@@ -148,7 +186,7 @@ extension BotHandlers {
     ///   - results: array of data reults to populate names of buttons
     ///   - chatId: chatId for callback handlers
     ///   - bot: an instance of Bot to dispatch handlers
-    private static func createAndPopulateInlineReplyMarkup(with items: [Result], _ chatId: TGChatId, _ bot: TGBotPrtcl) -> TGReplyMarkup {
+    private static func createAndPopulateInlineReplyMarkup(with items: [Item], _ chatId: TGChatId, _ bot: TGBotPrtcl) -> TGReplyMarkup {
         let itemPerRow = 2 // items per row
         let rows = Int((Double(items.count) / Double(itemPerRow)).rounded()) // number of rows
 
@@ -170,5 +208,38 @@ extension BotHandlers {
         }
         let replyMarkup: TGReplyMarkup = .inlineKeyboardMarkup(.init(inlineKeyboard: keyboard))
         return replyMarkup
+    }
+    
+    private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ result: Item, _ id: String) {
+        let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
+            guard let chatId: TGChatId = dictionary[id] else { return }
+            let text = createHTML(from: result)
+            send(text, chatId, bot, parseMode: .html)
+        }
+        bot.connection.dispatcher.add(handler)
+    }
+    
+    private static func getResourceOf<T:Codable>(type: T.Type, for url: String, _ app: Vapor.Application, completion: @escaping (Result<T, Error>) -> Void) {
+        let uri = URI(string: url)
+        app.client.get(uri).whenComplete { result in
+            switch result {
+            case .success(let response):
+                
+                guard let buffer = response.body else { return }
+                guard let data = String(buffer: buffer).data(using: .utf8) else { return }
+                
+                do {
+                    let decodedData = try JSONDecoder().decode(T.self, from: data)
+                    completion(.success(decodedData))
+                } catch {
+                    completion(.failure(error))
+                    print(error)
+                }
+                
+            case .failure(let error):
+                completion(.failure(error))
+                print(error)
+            }
+        }
     }
 }

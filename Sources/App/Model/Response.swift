@@ -19,7 +19,7 @@ struct Response: Content, Codable {
 // MARK: - Similar
 struct Similar: Codable {
 //    let info: [Results]
-    let results: [Result]
+    let results: [Item]
 
     enum CodingKeys: String, CodingKey {
 //        case info = "Info"
@@ -28,7 +28,7 @@ struct Similar: Codable {
 }
 
 // MARK: - Results
-struct Result: Codable {
+struct Item: Codable {
     let name, type, wTeaser: String
     let wURL, yURL: String
     let yID: String

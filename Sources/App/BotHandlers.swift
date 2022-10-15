@@ -15,6 +15,7 @@ final class BotHandlers {
     static func addHandlers(app: Vapor.Application, bot: TGBotPrtcl) {
         defineHandler(app: app, bot: bot)
         diceHandler(app: app, bot: bot)
+        infoHandler(app: app, bot: bot)
         helpHandler(app: app, bot: bot)
         pronounceHandler(app: app, bot: bot)
         queryHandler(app: app, bot: bot)
@@ -81,6 +82,43 @@ final class BotHandlers {
         bot.connection.dispatcher.add(handler)
     }
     
+    private static func infoHandler(app: Vapor.Application, bot: TGBotPrtcl) {
+        let command = "/info"
+        let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
+            
+            guard let message = update.message else { return }
+            let chatId: TGChatId = .chat(message.chat.id)
+            if var query = message.text, query != command {
+                if let range = query.range(of: command) {
+                    query.removeSubrange(range)
+                }
+                guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
+                
+                getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
+                switch result {
+                case .success(let data):
+                    let item = data.similar.info[0]
+                    
+                    switch !items.isEmpty {
+                    case true:
+
+                        let text = createHTML(from: item)
+                        send(text, chatId, bot, message.messageId, parseMode: .html)
+                        
+                    default:
+                        send("Sorry we couldn't find anything for your request.", chatId, bot, message.messageId)
+                    }
+                case .failure(let error):
+                    print(error)
+                }
+            }
+            } else {
+                send("Please send me a message like: \(command) word", chatId, bot, message.messageId)
+            }
+        }
+        bot.connection.dispatcher.add(handler)
+    }
+
     private static func pronounceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
         let command = "/pronounce"
         let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in

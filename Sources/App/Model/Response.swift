@@ -18,11 +18,11 @@ struct Response: Content, Codable {
 
 // MARK: - Similar
 struct Similar: Codable {
-//    let info: [Results]
+    let info: [Item]
     let results: [Item]
 
     enum CodingKeys: String, CodingKey {
-//        case info = "Info"
+        case info = "Info"
         case results = "Results"
     }
 }

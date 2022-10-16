@@ -9,7 +9,7 @@ import telegram_vapor_bot
 import Vapor
 
 final class BotHandlers {
-    
+    // TODO: - figure out how to storage ids
     private static var dictionary: [String: TGChatId] = [:]
     
     static func addHandlers(app: Vapor.Application, bot: TGBotPrtcl) {
@@ -22,16 +22,19 @@ final class BotHandlers {
     }
     
     private static func defineHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let command = "/define"
-        let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
-            guard let message = update.message else { return }
+        
+        let handler = TGMessageHandler(filters: .command.names([Command.define.name])) { update, bot in
+            guard let message = update.message else {
+                print(Abort(.custom(code: 5, reasonPhrase: "Definition message nil.")))
+                return
+            }
+            
             let chatId = getChatID(from: message)
             
-            if var query = message.text, query != command {
-                query.replaceSelf("\(command) ", "")
+            if var query = message.text, query != Command.define.name {
+                query.replaceSelf(Command.define.name, "")
                 
-                guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
-                let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
+                let url = URLS.DictionaryApi.getDefinitions(query).url
                 
                 getResourceOf(type: [Word].self, for: url, app) { result in
                     
@@ -53,29 +56,32 @@ final class BotHandlers {
                         send(text, chatId, bot, parseMode: .html, message.messageId)
                         
                     case .failure(let error):
-                        print(error)
+                        print(Abort(.custom(code: 4, reasonPhrase: "Failed to get a definition query. \(error.localizedDescription)")))
                     }
                 }
             } else {
-                send("Please send me a message like: \(command) word", chatId, bot, message.messageId)
+                send("Please send me a message like: \(Command.define.name) word", chatId, bot, message.messageId)
             }
         }
         bot.connection.dispatcher.add(handler)
     }
     
     private static func diceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .command.names(["/dice"])) { update, bot in
+        
+        // TODO: - make emoji replymarkup bigger
+        
+        let handler = TGMessageHandler(filters: .command.names([Command.dice.name])) { update, bot in
             guard let message = update.message else { return }
             let chatId = getChatID(from: message)
             
             let replyMarkup: TGReplyMarkup = createAndPopulateInlineReplyMarkup(with: Emoji.allCases, chatId, bot, itemsPerRow: 3)
-            send("Choose what you want:", chatId, bot, message.messageId, replyMarkup: replyMarkup)
+            send("Choose what you want:", chatId, bot, message.messageId, replyMarkup)
         }
         bot.connection.dispatcher.add(handler)
     }
     
     private static func helpHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let handler = TGMessageHandler(filters: .command.names(["/help"])) { update, bot in
+        let handler = TGMessageHandler(filters: .command.names([Command.help.name])) { update, bot in
             let params: TGSendMessageParams = .init(chatId: .chat(update.message!.chat.id), text: "Count: \(dictionary.count)")
             try bot.sendMessage(params: params)
         }
@@ -83,16 +89,23 @@ final class BotHandlers {
     }
     
     private static func infoHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let command = "/info"
-        let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
+        
+        let handler = TGMessageHandler(filters: .command.names([Command.info.name])) { update, bot in
             
-            guard let message = update.message else { return }
+            guard let message = update.message else {
+                print(Abort(.custom(code: 5, reasonPhrase: "Info message nil.")))
+                return
+            }
+            
             let chatId = getChatID(from: message)
             
-            if var query = message.text, query != command {
-                query.replaceSelf("\(command) ", "")
+            if var query = message.text, query != Command.info.name {
                 
-                getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
+                query.replaceSelf(Command.info.name, "")
+                
+                let url = URLS.SimilarApi.getSimilar(query).url
+                
+                getResourceOf(type: Response.self, for: url, app) { result in
                     switch result {
                     case .success(let data):
                         let items = data.similar.info
@@ -107,26 +120,28 @@ final class BotHandlers {
                             send("Sorry we couldn't find anything for your request.", chatId, bot, message.messageId)
                         }
                     case .failure(let error):
-                        print(error)
+                        print(Abort(.custom(code: 4, reasonPhrase: "Failed to get the info query. \(error.localizedDescription)")))
                     }
                 }
             } else {
-                send("Please send me a message like: \(command) word", chatId, bot, message.messageId)
+                send("Please send me a message like: \(Command.info.name) word", chatId, bot, message.messageId)
             }
         }
         bot.connection.dispatcher.add(handler)
     }
     
     private static func pronounceHandler(app: Vapor.Application, bot: TGBotPrtcl) {
-        let command = "/pronounce"
-        let handler = TGMessageHandler(filters: .command.names([command])) { update, bot in
-            guard let message = update.message else { return }
+        
+        let handler = TGMessageHandler(filters: .command.names([Command.pronounce.name])) { update, bot in
+            guard let message = update.message else {
+                print(Abort(.custom(code: 5, reasonPhrase: "Prononuciation message nil.")))
+                return
+            }
             let chatId = getChatID(from: message)
-            if var query = message.text, query != command {
-                query.replaceSelf("\(command) ", "")
+            if var query = message.text, query != Command.pronounce.name {
+                query.replaceSelf(Command.pronounce.name, "")
                 
-                guard let query = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
-                let url = "https://api.dictionaryapi.dev/api/v2/entries/en/\(query)"
+                let url = URLS.DictionaryApi.getPronounciations(query).url
                 
                 getResourceOf(type: [Word].self, for: url, app) { result in
                     switch result {
@@ -143,37 +158,44 @@ final class BotHandlers {
                             }
                         }
                     case .failure(let error):
-                        print(error)
+                        print(Abort(.custom(code: 4, reasonPhrase: "Failed to get a pronounciation query. \(error.localizedDescription)")))
                     }
                 }
             } else {
-                send("Please send me a message like: \(command) word", chatId, bot, message.messageId)
+                send("Please send me a message like: \(Command.pronounce.name) word", chatId, bot, message.messageId)
             }
         }
         bot.connection.dispatcher.add(handler)
     }
     
     private static func queryHandler(app: Vapor.Application, bot: TGBotPrtcl) {
+        
+        // TODO: - update message rather than send a new one
+        
         let handler = TGMessageHandler(filters: .text && !.command) { update, bot in
-            guard let message = update.message else { return }
+            guard let message = update.message else {
+                print(Abort(.custom(code: 5, reasonPhrase: "Similar query message nil.")))
+                return
+            }
             let chatId = getChatID(from: message)
             guard let query = message.text else { return }
             
-            getResourceOf(type: Response.self, for: urlString(for: query), app) { result in
+            let url = URLS.SimilarApi.getSimilar(query).url
+            getResourceOf(type: Response.self, for: url, app) { result in
                 switch result {
                 case .success(let data):
                     let items = data.similar.results.shuffled()
                     let sliceOfItems = items.prefix(10).shuffled()
                     switch !items.isEmpty {
                     case true:
-                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: sliceOfItems, chatId, bot, itemsPerRow: 2)
+                        let replyMarkup = createAndPopulateInlineReplyMarkup(with: sliceOfItems, chatId, bot)
                         
-                        send("Here's what I found:", chatId, bot, message.messageId, replyMarkup: replyMarkup)
+                        send("Here's what I found:", chatId, bot, message.messageId, replyMarkup)
                     default:
                         send("Sorry we couldn't find anything for your request.", chatId, bot, message.messageId)
                     }
                 case .failure(let error):
-                    print(error)
+                    print(Abort(.custom(code: 4, reasonPhrase: "Failed to get a reponse from query. \(error.localizedDescription)")))
                 }
             }
         }
@@ -203,26 +225,12 @@ extension BotHandlers {
             """
     }
     
-    private static func urlString(for query: String) -> String {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "tastedive.com"
-        components.path = "/api/similar"
-        components.queryItems = [
-            URLQueryItem(name: "q", value: query.replacingOccurrences(of: " ", with: "+")),
-            //            URLQueryItem(name: "limit", value: "10"),
-            URLQueryItem(name: "info", value: "1"),
-            URLQueryItem(name: "k", value: "\(Environment.get("API_KEY")!)"),
-        ]
-        return components.url?.absoluteString ?? ""
-    }
-    
-    private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, replyMarkup: TGReplyMarkup? = nil) {
+    private static func send(_ text: String, _ chatId: TGChatId, _ bot: TGBotPrtcl, parseMode: TGParseMode? = nil, disableWebPagePreview: Bool? = false, _ replyToMessageId: Int? = nil, _ replyMarkup: TGReplyMarkup? = nil) {
         do {
             let params: TGSendMessageParams = .init(chatId: chatId, text: text, parseMode: parseMode, disableWebPagePreview: disableWebPagePreview, replyToMessageId: replyToMessageId, replyMarkup: replyMarkup)
             try bot.sendMessage(params: params)
         } catch {
-            print(error)
+            print(Abort(.custom(code: 5, reasonPhrase: "Bot failed to send a message. \(error.localizedDescription)")))
         }
     }
     
@@ -231,7 +239,7 @@ extension BotHandlers {
             let params = TGSendChatActionParams(chatId: chatId, action: action.rawValue)
             try bot.sendChatAction(params: params)
         } catch {
-            print(error)
+            print(Abort(.custom(code: 5, reasonPhrase: "Bot failed to send an action. \(error.localizedDescription)")))
         }
     }
     
@@ -240,7 +248,7 @@ extension BotHandlers {
             let params: TGSendDiceParams = .init(chatId: chatId, emoji: emojiName)
             try bot.sendDice(params: params)
         } catch {
-            print(error)
+            print(Abort(.custom(code: 5, reasonPhrase: "Bot failed to send dices. \(error.localizedDescription)")))
         }
     }
     
@@ -249,7 +257,7 @@ extension BotHandlers {
     ///   - results: array of data reults to populate names of buttons
     ///   - chatId: chatId for callback handlers
     ///   - bot: an instance of Bot to dispatch handlers
-    private static func createAndPopulateInlineReplyMarkup(with items: [Repliable], _ chatId: TGChatId, _ bot: TGBotPrtcl, itemsPerRow: Int) -> TGReplyMarkup {
+    private static func createAndPopulateInlineReplyMarkup(with items: [Repliable], _ chatId: TGChatId, _ bot: TGBotPrtcl, itemsPerRow: Int = 2) -> TGReplyMarkup {
         
         let numOfRows = divideRoundUp(n: items.count, d: itemsPerRow)
         
@@ -275,17 +283,27 @@ extension BotHandlers {
     
     private static func createButtonsActionHandler(_ bot: TGBotPrtcl, _ object: Repliable, _ id: String) {
         let handler = TGCallbackQueryHandler(pattern: id) { update, bot in
-            guard let chatId: TGChatId = dictionary[id] else { return }
+            guard let chatId: TGChatId = dictionary[id] else {
+                print(Abort(.custom(code: 5, reasonPhrase: "Failed to get chatID from storage.")))
+                return
+            }
             
             switch object {
             case is Item:
-                guard let item = object as? Item else { return }
+                guard let item = object as? Item else {
+                    print(Abort(.custom(code: 5, reasonPhrase: "Failed to cast object as Item")))
+                    return
+                }
                 let text = createHTML(from: item)
                 send(text, chatId, bot, parseMode: .html)
             case is Emoji:
-                guard let emoji = object as? Emoji else { return }
+                guard let emoji = object as? Emoji else {
+                    print(Abort(.custom(code: 5, reasonPhrase: "Failed to cast object as Emoji")))
+                    return
+                }
                 sendDice(emoji.name, chatId, bot)
             default:
+                print(Abort(.custom(code: 5, reasonPhrase: "Object for button handler is undefined")))
                 break
             }
             // close callback
@@ -295,26 +313,29 @@ extension BotHandlers {
         bot.connection.dispatcher.add(handler)
     }
     
-    private static func getResourceOf<T:Codable>(type: T.Type, for url: String, _ app: Vapor.Application, completion: @escaping (Result<T, Error>) -> Void) {
-        let uri = URI(string: url)
-        app.client.get(uri).whenComplete { result in
-            switch result {
-            case .success(let response):
-                
-                guard let buffer = response.body else { return }
-                guard let data = String(buffer: buffer).data(using: .utf8) else { return }
-                
-                do {
-                    let decodedData = try JSONDecoder().decode(T.self, from: data)
-                    completion(.success(decodedData))
-                } catch {
-                    completion(.failure(error))
-                    print(error)
+    private static func getResourceOf<T:Codable>(type: T.Type, for url: URL?, _ app: Vapor.Application, completion: @escaping (Result<T, Error>) -> Void) {
+        guard let urlString = url?.absoluteString else {
+            completion(.failure(Abort(.custom(code: 1, reasonPhrase: "Couldn't convert url to string"))))
+            return
+        }
+        Task {
+            app.client.get(URI(string: urlString)).whenComplete { result in
+                switch result {
+                case .success(let response):
+                    
+                    guard let buffer = response.body else { return }
+                    guard let data = String(buffer: buffer).data(using: .utf8) else { return }
+                    
+                    do {
+                        let decodedData = try JSONDecoder().decode(T.self, from: data)
+                        completion(.success(decodedData))
+                    } catch {
+                        completion(.failure(Abort(.custom(code: 3, reasonPhrase: "Failed decoding JSON"))))
+                    }
+                    
+                case .failure(let error):
+                    completion(.failure(Abort(.custom(code: 4, reasonPhrase: "Failed to get a response. \(error.localizedDescription)"))))
                 }
-                
-            case .failure(let error):
-                completion(.failure(error))
-                print(error)
             }
         }
     }
@@ -327,5 +348,3 @@ extension BotHandlers {
         return n / d + (n % d == 0 ? 0 : 1)
     }
 }
-
-

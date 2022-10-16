@@ -49,30 +49,30 @@ enum URLS {
             component.scheme = "https"
             component.host = "api.dictionaryapi.dev"
             component.path = path
-            component.queryItems = queryItems
+//            component.queryItems = queryItems
             return component.url
         }
         
         private var path: String {
             switch self {
-            case .getDefinitions:
-                return "/api/v2/entries/en/"
-            case .getPronounciations:
-                return "/api/v2/entries/en/"
+            case .getDefinitions(let query):
+                return "/api/v2/entries/en/\(query)"
+            case .getPronounciations(let query):
+                return "/api/v2/entries/en/\(query)"
             }
         }
         
-        private var queryItems: [URLQueryItem] {
-            switch self {
-            case .getDefinitions(let query):
-                return [
-                    URLQueryItem(name: "q", value: query),
-                ]
-            case .getPronounciations(let query):
-                return [
-                    URLQueryItem(name: "q", value: query),
-                ]
-            }
-        }
+//        private var queryItems: [URLQueryItem] {
+//            switch self {
+//            case .getDefinitions(let query):
+//                return [
+//                    URLQueryItem(name: "q", value: query),
+//                ]
+//            case .getPronounciations(let query):
+//                return [
+//                    URLQueryItem(name: "q", value: query),
+//                ]
+//            }
+//        }
     }
 }

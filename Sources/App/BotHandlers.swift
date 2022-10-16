@@ -1,10 +1,3 @@
-//
-//  BotHandlers.swift
-//  
-//
-//  Created by Evgenii Kolgin on 13.10.2022.
-//
-
 import telegram_vapor_bot
 import Vapor
 
